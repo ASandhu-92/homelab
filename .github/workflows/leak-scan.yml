@@ -1,0 +1,37 @@
+name: leak-scan
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so gitleaks can scan every commit, not just the tip.
+          fetch-depth: 0
+
+      # The public .gitleaks.toml carries only generic rules. Environment-
+      # specific identity patterns live in the GITLEAKS_PRIVATE_CONFIG repo
+      # secret so they are enforced in CI without being disclosed in-repo.
+      # Forks / checkouts without the secret fall back to the public config.
+      - name: Select scan config
+        env:
+          PRIVATE_CONFIG: ${{ secrets.GITLEAKS_PRIVATE_CONFIG }}
+        run: |
+          if [ -n "$PRIVATE_CONFIG" ]; then
+            printf '%s\n' "$PRIVATE_CONFIG" > "$RUNNER_TEMP/gitleaks.toml"
+          else
+            cp .gitleaks.toml "$RUNNER_TEMP/gitleaks.toml"
+          fi
+          echo "GITLEAKS_CONFIG=$RUNNER_TEMP/gitleaks.toml" >> "$GITHUB_ENV"
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          # Fail the job (non-zero exit) if any leak is found.
+          GITLEAKS_ENABLE_SUMMARY: "true"

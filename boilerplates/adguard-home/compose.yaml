@@ -1,0 +1,32 @@
+---
+# AdGuard Home: network-wide DNS with ad/tracker blocking.
+# Serves DNS on port 53 to every LAN device (push it via DHCP), and provides
+# the wildcard rewrite that resolves *.example.com to the reverse proxy.
+#
+# host networking is the simplest way to serve DNS on port 53 to the whole LAN
+# and to see real client IPs in query logs. If you prefer bridged networking,
+# swap the network_mode block for an explicit port list (see comments below).
+
+services:
+  adguardhome:
+    image: adguard/adguardhome:v0.107.79
+    container_name: adguardhome
+    restart: unless-stopped
+    # host mode: binds 53/tcp+udp and the web UI directly on the host IP.
+    network_mode: host
+    volumes:
+      - ./work:/opt/adguardhome/work     # runtime data, query log, stats
+      - ./conf:/opt/adguardhome/conf     # AdGuardHome.yaml lives here
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    # --- Bridged alternative (remove network_mode: host above to use) --------
+    # ports:
+    #   - "53:53/tcp"
+    #   - "53:53/udp"
+    #   - "3000:3000/tcp"   # initial setup wizard
+    #   - "80:80/tcp"       # admin UI after setup

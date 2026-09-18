@@ -1,0 +1,59 @@
+# SearXNG: privacy-respecting metasearch engine that aggregates results from
+# many upstream engines without tracking the user. Valkey (a Redis fork) backs
+# the rate limiter and cache.
+services:
+  searxng:
+    image: searxng/searxng:2026.9.13-d4ce87c23
+    container_name: searxng
+    restart: unless-stopped
+    depends_on:
+      valkey:
+        condition: service_healthy
+    ports:
+      # Behind a reverse proxy in production; raw port for local testing only.
+      - "8080:8080"
+    environment:
+      # Public base URL used to build absolute links; set to your proxy host.
+      - SEARXNG_BASE_URL=${SEARXNG_BASE_URL}
+      # Secret used to sign requests/sessions; generate a random value.
+      - SEARXNG_SECRET=${SEARXNG_SECRET}
+    volumes:
+      # settings.yml enables the JSON API and points at Valkey (see settings/).
+      - ./settings:/etc/searxng:rw
+    cap_drop:
+      - ALL
+    cap_add:
+      # SearXNG drops privileges at startup; it only needs these two.
+      - CHOWN
+      - SETGID
+      - SETUID
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  valkey:
+    image: valkey/valkey:9-alpine
+    container_name: searxng-valkey
+    restart: unless-stopped
+    # Persist limiter state to an append-only file; harmless to lose but avoids
+    # cold-start rate-limit churn on restart.
+    command: valkey-server --save 30 1 --loglevel warning
+    volumes:
+      - valkey-data:/data
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  valkey-data:

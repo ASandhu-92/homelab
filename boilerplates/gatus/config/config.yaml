@@ -1,0 +1,80 @@
+# Gatus configuration: declarative monitor definitions.
+# Docs: https://github.com/TwiN/gatus
+#
+# Endpoints are organised into "groups" that render as sections on the status
+# page. Conditions are the assertions that must hold for an endpoint to be UP.
+
+# ---------------------------------------------------------------------------
+# Alerting providers. The webhook URL is injected from the environment so no
+# secret lives in this file. Wire this to a chat app, ntfy, Alertmanager,
+# etc.: any endpoint that accepts a JSON POST.
+alerting:
+  custom:
+    url: "${ALERT_WEBHOOK_URL}"
+    method: "POST"
+    body: |
+      {
+        "endpoint": "[ENDPOINT_NAME]",
+        "status": "[ALERT_TRIGGERED_OR_RESOLVED]",
+        "description": "[ALERT_DESCRIPTION]"
+      }
+
+endpoints:
+  # -------------------------------------------------------------------------
+  # Group: web, public HTTPS services.
+  # The [CERTIFICATE_EXPIRATION] condition is the standout pattern: Gatus reads
+  # the TLS cert on each probe and fails BEFORE it expires, turning silent
+  # cert-expiry outages into an actionable alert days in advance.
+  - name: status-page
+    group: web
+    url: "https://status.example.com"
+    interval: 5m
+    conditions:
+      - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 800"
+      # Alert while there are still >= 14 days of validity left.
+      - "[CERTIFICATE_EXPIRATION] > 336h"
+    alerts:
+      - type: custom
+        send-on-resolved: true
+
+  - name: dashboard
+    group: web
+    url: "https://dashboard.example.com"
+    interval: 5m
+    conditions:
+      - "[STATUS] == 200"
+      - "[CERTIFICATE_EXPIRATION] > 336h"
+    alerts:
+      - type: custom
+        send-on-resolved: true
+
+  # -------------------------------------------------------------------------
+  # Group: dns, resolver health. Gatus performs a real DNS query and asserts
+  # on the returned record, catching resolver failures that an HTTP check misses.
+  - name: internal-resolver
+    group: dns
+    url: "1.1.1.1"          # DNS server to query
+    dns:
+      query-name: "example.com"
+      query-type: "A"
+    interval: 1m
+    conditions:
+      - "[DNS_RCODE] == NOERROR"
+
+  # -------------------------------------------------------------------------
+  # Group: infra, raw TCP reachability for services with no HTTP surface
+  # (databases, brokers, SSH). Confirms the port accepts connections.
+  - name: postgres-port
+    group: infra
+    url: "tcp://192.0.2.10:5432"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  - name: ssh-gateway
+    group: infra
+    url: "tcp://192.0.2.11:22"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"

@@ -1,0 +1,100 @@
+---
+# Authelia main configuration template.
+# Secrets (jwt, session, storage encryption) are supplied via environment
+# variables (see compose.yaml / .env.example), not written here.
+
+theme: dark
+
+server:
+  address: "tcp://0.0.0.0:9091"
+
+log:
+  level: info
+
+# --- Identity / TOTP 2FA -----------------------------------------------------
+totp:
+  issuer: example.com
+  period: 30
+  skew: 1
+
+# --- Authentication backend (file) -------------------------------------------
+# Users and password hashes live in users_database.yml (git-ignored).
+authentication_backend:
+  password_reset:
+    disable: false
+  file:
+    path: /config/users_database.yml
+    password: # hashing settings below
+      algorithm: argon2
+      argon2:
+        variant: argon2id
+        iterations: 3
+        memory: 65536
+        parallelism: 4
+        key_length: 32
+        salt_length: 16
+
+# --- Access control ----------------------------------------------------------
+# Rules are evaluated top to bottom; first match wins.
+access_control:
+  default_policy: deny
+  rules:
+    # Public service, no authentication required.
+    - domain: "public.example.com"
+      policy: bypass
+
+    # Admin surfaces require username + password + a second factor (TOTP).
+    - domain:
+        - "traefik.example.com"
+        - "admin.example.com"
+      policy: two_factor
+      subject:
+        - "group:admins"
+
+    # Everything else behind the proxy: at least one factor.
+    - domain: "*.example.com"
+      policy: one_factor
+
+# --- Session -----------------------------------------------------------------
+session:
+  name: authelia_session
+  # Cookie is scoped to the parent domain so SSO works across all subdomains.
+  cookies:
+    - domain: example.com
+      authelia_url: https://auth.example.com
+      default_redirection_url: https://public.example.com
+      expiration: 1h
+      inactivity: 5m
+  # For multi-instance / high availability, switch the session store to Redis:
+  # redis:
+  #   host: redis
+  #   port: 6379
+
+# --- Regulation (brute-force protection) -------------------------------------
+regulation:
+  max_retries: 3
+  find_time: 2m
+  ban_time: 5m
+
+# --- Storage -----------------------------------------------------------------
+# Local SQLite is fine for a single instance. For HA use PostgreSQL/MySQL
+# (uncomment below and remove the local block).
+storage:
+  local:
+    path: /config/db.sqlite3
+  # postgres:
+  #   address: tcp://postgres:5432
+  #   database: authelia
+  #   username: authelia
+  #   password: ${PW}
+
+# --- Notifier ----------------------------------------------------------------
+# Used for password resets and 2FA enrollment links. filesystem is for testing;
+# use SMTP in production.
+notifier:
+  filesystem:
+    filename: /config/notification.txt
+  # smtp:
+  #   address: smtp://mail.example.com:587
+  #   username: admin@example.com
+  #   sender: "Authelia <admin@example.com>"

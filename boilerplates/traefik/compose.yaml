@@ -1,0 +1,95 @@
+---
+# Traefik v3 reverse proxy.
+# - Terminates TLS for every service on the LAN.
+# - Obtains Let's Encrypt certificates via the Cloudflare DNS-01 challenge,
+#   which works even behind CGNAT (no inbound port-forward required).
+# - Talks to Docker through a read-only socket proxy rather than mounting the
+#   raw Docker socket, so a Traefik compromise cannot drive the Docker daemon.
+# - Uses a file provider (./dynamic) for routers/middlewares defined off-label.
+
+networks:
+  proxy:
+    name: proxy
+  socket:
+    name: socket
+    internal: true
+
+services:
+  # Read-only Docker API broker. Traefik reads container labels through this
+  # instead of the host socket; only the endpoints Traefik needs are enabled.
+  dockerproxy:
+    image: tecnativa/docker-socket-proxy:0.5.0
+    container_name: dockerproxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1     # allow read of container list/labels
+      NETWORKS: 1
+      SERVICES: 1
+      TASKS: 1
+      POST: 0           # deny all write/POST endpoints
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - socket
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:2375/version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  traefik:
+    image: traefik:v3.7.13
+    container_name: traefik
+    restart: unless-stopped
+    depends_on:
+      - dockerproxy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Cloudflare token used for the DNS-01 challenge. Scope it to
+      # Zone:DNS:Edit for your zone only. Supplied from .env, never inline.
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
+    command:
+      # --- Entry points ---
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Redirect all plain HTTP to HTTPS.
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      # --- Providers ---
+      - "--providers.docker=true"
+      - "--providers.docker.endpoint=tcp://dockerproxy:2375"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=proxy"
+      - "--providers.file.directory=/dynamic"
+      - "--providers.file.watch=true"
+      # --- Certificate resolver (Let's Encrypt DNS-01 via Cloudflare) ---
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,9.9.9.9:53"
+      # --- Dashboard / API ---
+      - "--api.dashboard=true"
+      # --- Logging ---
+      - "--log.level=INFO"
+      - "--accesslog=true"
+    volumes:
+      - ./letsencrypt:/letsencrypt
+      - ./dynamic:/dynamic:ro
+    networks:
+      - proxy
+      - socket
+    labels:
+      - "traefik.enable=true"
+      # Dashboard router, protected by the Authelia forward-auth middleware.
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=authelia@file"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

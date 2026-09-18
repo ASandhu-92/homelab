@@ -1,0 +1,43 @@
+# gitleaks configuration for the homelab-boilerplates repo.
+# Extends the upstream default ruleset with custom rules that catch
+# private, environment-specific identifiers which must never be published.
+#
+# Usage: gitleaks detect --config .gitleaks.toml --redact
+
+[extend]
+# Inherit all of gitleaks' built-in secret-detection rules (API keys,
+# tokens, private keys, etc.), then add the custom rules below.
+useDefault = true
+
+[[rules]]
+id = "lan-ip-192-168"
+description = "RFC1918 Class C LAN address leak"
+regex = '''192\.168\.\d{1,3}\.\d{1,3}'''
+tags = ["homelab", "lan-ip"]
+
+[[rules]]
+id = "rfc1918-ip"
+description = "Other RFC1918 private address leak"
+regex = '''\b(10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b'''
+tags = ["homelab", "lan-ip"]
+
+# NOTE: environment-specific identity patterns (private domain, hostnames,
+# personal identifiers) are intentionally NOT in this public file: they are
+# enforced in CI via the GITLEAKS_PRIVATE_CONFIG repository secret and a
+# local pre-push scan. Publishing those regexes would disclose the very
+# strings they protect.
+
+[[rules]]
+id = "mac-address"
+description = "MAC address leak"
+regex = '''\b([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b'''
+tags = ["homelab", "mac"]
+
+[allowlist]
+description = "Allow placeholder values used throughout the templates"
+regexes = [
+  '''example\.com''',
+  '''192\.0\.2\.\d{1,3}''',
+  '''admin@example\.com''',
+  '''CHANGE_ME''',
+]

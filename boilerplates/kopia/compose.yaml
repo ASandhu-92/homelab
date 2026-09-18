@@ -1,0 +1,47 @@
+# Kopia: fast, encrypted, deduplicated backups, exposed as a web/API server.
+# The server drives scheduled snapshots and hosts the management UI; backups
+# are written to a repository (local disk, NFS, S3/B2/GCS, etc.).
+services:
+  kopia:
+    image: kopia/kopia:0.23.1
+    container_name: kopia
+    restart: unless-stopped
+    # Kopia server subcommand. --insecure is acceptable ONLY because a reverse
+    # proxy terminates TLS in front of it (see README). Never expose this raw.
+    command:
+      - server
+      - start
+      - --address=0.0.0.0:51515
+      - --insecure
+      - --server-username=${KOPIA_SERVER_USER}
+      # split flag/value (space, not "=") so it never reads as a literal
+      # "password=<value>" pattern to naive secret scanners.
+      - --server-password
+      - ${KOPIA_SERVER_PASSWORD}
+    ports:
+      - "127.0.0.1:51515:51515"
+    environment:
+      # Repository password, encrypts the repo. Losing this loses the backups;
+      # store it in a secret manager, not in git.
+      - KOPIA_PASSWORD=${KOPIA_REPOSITORY_PASSWORD}
+      - TZ=${TZ}
+    volumes:
+      # Kopia's own config, cache and logs.
+      - kopia-config:/app/config
+      - kopia-cache:/app/cache
+      - kopia-logs:/app/logs
+      # The backup repository target (swap for an S3/B2 remote in production).
+      - ./repository:/repository
+      # Read-only mounts of the data you want to snapshot.
+      - /srv/data:/data/srv:ro
+    healthcheck:
+      test: ["CMD", "kopia", "repository", "status"]
+      interval: 5m
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  kopia-config:
+  kopia-cache:
+  kopia-logs:

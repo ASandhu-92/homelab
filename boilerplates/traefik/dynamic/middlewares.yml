@@ -1,0 +1,54 @@
+---
+# File-provider middlewares, referenced from routers as `<name>@file`.
+# Kept off-label so they can be shared by many services and hot-reloaded
+# (Traefik watches this directory).
+
+http:
+  middlewares:
+
+    # --- Forward-auth to Authelia -------------------------------------------
+    # Point protected routers at `authelia@file`. Traefik sends each request to
+    # Authelia's /api/verify endpoint; Authelia either returns 200 (allow) or
+    # 302-redirects the browser to the login portal. The Remote-* headers are
+    # copied back onto the upstream request so backends can read the identity.
+    authelia:
+      forwardAuth:
+        address: "http://authelia:9091/api/verify?rd=https://auth.example.com"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - "Remote-User"
+          - "Remote-Groups"
+          - "Remote-Name"
+          - "Remote-Email"
+
+    # --- Security headers ----------------------------------------------------
+    security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        customResponseHeaders:
+          X-Powered-By: ""      # strip backend fingerprinting headers
+          Server: ""
+
+    # --- Rate limit ----------------------------------------------------------
+    # Token-bucket: sustained `average` req/s per source, bursting to `burst`.
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1s
+
+    # --- Convenience chain ---------------------------------------------------
+    # Attach `secured@file` to a router to get auth + headers + rate-limit at
+    # once. Order matters: auth runs first, then headers, then rate limiting.
+    secured:
+      chain:
+        middlewares:
+          - authelia
+          - security-headers
+          - rate-limit

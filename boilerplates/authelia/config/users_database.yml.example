@@ -1,0 +1,19 @@
+---
+# Copy to users_database.yml (git-ignored) and replace the password hash.
+#
+# Generate an argon2id hash for a user with:
+#
+#   docker run --rm authelia/authelia:4.39.28 \
+#     authelia crypto hash generate argon2 --password 'your-password'
+#
+# Paste the resulting $argon2id$... string as the `password` value below.
+
+users:
+  admin:
+    disabled: false
+    displayname: "Admin"
+    # Placeholder hash, REPLACE. Never reuse this value.
+    password: SETME
+    email: admin@example.com
+    groups:
+      - admins

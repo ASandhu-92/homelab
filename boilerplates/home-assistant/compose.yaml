@@ -1,0 +1,31 @@
+# Home Assistant Container: open-source home automation hub.
+# Runs on the host network (see README "Why host network mode") so that device
+# auto-discovery protocols work. That constraint shapes the whole compose file.
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2026.9.2
+    container_name: homeassistant
+    restart: unless-stopped
+    # host mode: mDNS/Zeroconf, SSDP/DLNA, DHCP discovery, and many
+    # integrations rely on broadcast/multicast traffic that a bridged Docker
+    # network drops. With host networking HA listens on the host's :8123
+    # directly, so no `ports:` mapping is used or possible.
+    network_mode: host
+    privileged: true          # needed for some USB/Bluetooth adapters; drop if unused
+    environment:
+      - TZ=${TZ}
+    volumes:
+      # All HA config, the database, and long-lived tokens live here.
+      - ./config:/config
+      # Let the container resolve the host timezone.
+      - /etc/localtime:/etc/localtime:ro
+      # Uncomment to pass through a Zigbee/Z-Wave/Matter USB radio:
+      # devices:
+      #   - /dev/ttyUSB0:/dev/ttyUSB0
+    healthcheck:
+      # HA serves its frontend on :8123 on the host; check it's answering.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8123/manifest.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s       # HA can take a while to boot on first run

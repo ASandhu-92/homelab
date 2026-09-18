@@ -1,0 +1,36 @@
+# code-server: VS Code running in the browser, reachable from any device.
+# Built-in password auth is DISABLED here; authentication is deferred to an
+# SSO/auth middleware at the reverse proxy (see README).
+services:
+  code-server:
+    image: codercom/code-server:4.137.0
+    container_name: code-server
+    restart: unless-stopped
+    # --auth none: do NOT use code-server's password login. This is safe ONLY
+    # because the reverse proxy enforces SSO in front of it. Never expose this
+    # container directly with auth disabled.
+    command: ["--auth", "none", "--disable-telemetry", "--bind-addr", "0.0.0.0:8080"]
+    ports:
+      # Bind to loopback so the container is only reachable via the proxy,
+      # never directly from the LAN/internet.
+      - "127.0.0.1:8080:8080"
+    environment:
+      - TZ=${TZ}
+      # Runs as this UID/GID so files created in mounted volumes are owned by
+      # your host user, not root.
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      # IDE settings, extensions, auth state, persists across restarts/upgrades.
+      - code-server-config:/home/coder/.config
+      # Your projects/workspace, the actual code you edit.
+      - ./workspace:/home/coder/project
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  code-server-config:

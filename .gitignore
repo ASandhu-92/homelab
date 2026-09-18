@@ -1,0 +1,29 @@
+# Secrets and environment
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Secret stores / decrypted material
+secrets/
+*.decrypted
+*.dec
+*.enc.*
+
+# ACME / TLS state
+acme.json
+letsencrypt/
+certs/
+
+# Service runtime data
+data/
+config/*.local.*
+users_database.yml
+
+# OS / editor cruft
+.DS_Store
+*.swp
+*~

@@ -1,0 +1,26 @@
+# SearXNG settings: minimal snippet focused on enabling the JSON API and
+# wiring the Valkey-backed rate limiter. Full reference:
+# https://docs.searxng.org/admin/settings/index.html
+use_default_settings: true
+
+general:
+  instance_name: "Private Search"
+
+server:
+  # Injected from the environment (see .env.example). Signs sessions/requests.
+  secret_key: "${SEARXNG_SECRET}"
+  # Enable programmatic access. This is the key line for using SearXNG as a
+  # tool for LLM agents: it lets clients request format=json.
+  limiter: true
+  image_proxy: true
+
+search:
+  # Response formats offered. "json" is what makes SearXNG usable as an API /
+  # agent tool; "html" keeps the human UI working.
+  formats:
+    - html
+    - json
+
+redis:
+  # Valkey is Redis-compatible; the limiter and cache use this connection.
+  url: redis://valkey:6379/0
