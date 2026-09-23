@@ -24,6 +24,8 @@ config/*.local.*
 users_database.yml
 
 # OS / editor cruft
+__pycache__/
+*.pyc
 .DS_Store
 *.swp
 *~

@@ -29,8 +29,8 @@ Create the container unprivileged, and turn on nesting, which Docker inside
 an LXC needs:
 
 ```bash
-pct set 120 --features nesting=1
-pct config 120 | grep -E '^(unprivileged|features)'
+pct set 901 --features nesting=1
+pct config 901 | grep -E '^(unprivileged|features)'
 #   features: nesting=1
 #   unprivileged: 1
 ```
@@ -52,7 +52,7 @@ Two things that bit me:
 Bind mount the host directory into each container:
 
 ```bash
-pct set 120 -mp0 /srv/shared,mp=/mnt/shared
+pct set 901 -mp0 /srv/shared,mp=/mnt/shared
 ```
 
 Inside an unprivileged container, UID 1000 is UID 101000 on the host and
@@ -83,7 +83,7 @@ entry at nothing. `getfacl` still lists `user:101000:rwx`, but the
 ## VM settings that matter on my hardware
 
 ```bash
-qm create 130 --name vm-1 --memory 4096 --cores 2 \
+qm create 902 --name vm-1 --memory 4096 --cores 2 \
   --cpu host --machine q35 --bios ovmf \
   --scsihw virtio-scsi-single --net0 virtio,bridge=vmbr0 --ostype l26
 ```
