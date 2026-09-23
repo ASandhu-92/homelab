@@ -1,0 +1,73 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    name: compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Every compose file must parse and interpolate with its .env.example.
+      - run: ./scripts/validate.sh
+
+  trivy-repo:
+    name: trivy repo scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Scan of the files in this repo: misconfiguration checks plus secret
+      # detection. Fails the job on HIGH or CRITICAL findings, because these
+      # are files this repo controls. Note: Trivy's misconfiguration scanner
+      # has no Docker Compose support, so today the secret scanner does the
+      # work; the compose files are checked by the job above.
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: misconfig,secret
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  images:
+    name: list pinned images
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.list.outputs.list }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          imgs=$(for f in $(find . -path ./.git -prune -o -name compose.yaml -print); do
+                   d=$(dirname "$f")
+                   env=(); [ -f "$d/.env.example" ] && env=(--env-file .env.example)
+                   (cd "$d" && docker compose "${env[@]}" config --images)
+                 done | sort -u)
+          echo "$imgs"
+          echo "list=$(printf '%s\n' "$imgs" | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
+
+  trivy-image:
+    name: trivy image report
+    needs: images
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.images.outputs.list) }}
+    steps:
+      # A report, not a gate: CVEs in upstream images are the upstream's to
+      # fix, so they must not turn this repo's badge red. Read the table in
+      # the job log and bump the pin when a fixed release exists.
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ matrix.image }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "0"

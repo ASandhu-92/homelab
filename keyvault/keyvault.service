@@ -1,0 +1,34 @@
+# /etc/systemd/system/keyvault.service
+# Runs keyvault as an unprivileged user with most of the filesystem read-only
+# and network access limited to the reverse proxy's Docker network.
+[Unit]
+Description=keyvault (SOPS store writer)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=keyvault
+Group=keyvault
+ExecStart=/usr/bin/python3 /opt/keyvault/keyvault.py
+Restart=on-failure
+RestartSec=5
+# The age identity sops decrypts with; readable by the service user only.
+Environment=SOPS_AGE_KEY_FILE=/home/keyvault/.config/sops/age/keys.txt
+Environment=PYTHONUNBUFFERED=1
+# KV_* settings, including KV_EDGE_SECRET. Mode 600, root-owned.
+EnvironmentFile=/etc/keyvault/env
+LogsDirectory=keyvault
+LogsDirectoryMode=0750
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+# The only writable path: the store's directory (temp file, .prev, lock).
+ReadWritePaths=/srv/secrets
+# Only the proxy's Docker network (and loopback for local checks) can talk to it.
+IPAddressDeny=any
+IPAddressAllow=172.24.0.0/16 127.0.0.0/8
+
+[Install]
+WantedBy=multi-user.target

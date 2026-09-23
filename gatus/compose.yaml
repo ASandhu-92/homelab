@@ -1,0 +1,28 @@
+# Gatus: lightweight, developer-oriented uptime monitoring & status page.
+# Config is fully declarative (config/config.yaml), so the whole monitor set
+# lives in version control instead of a database.
+services:
+  gatus:
+    image: twinproduction/gatus:v5.36.0
+    container_name: gatus
+    restart: unless-stopped
+    ports:
+      # Front this with a reverse proxy in production; the raw port is exposed
+      # here only for local testing. See README "Integration".
+      - "8080:8080"
+    environment:
+      # Referenced by config.yaml via ${ALERT_WEBHOOK_URL} so no secret is
+      # ever committed. Values come from .env (see .env.example).
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL}
+    volumes:
+      # Declarative config, the single source of truth for every endpoint.
+      - ./config:/config:ro
+      # Persist history/uptime so a restart doesn't reset the status page.
+      - gatus-data:/data
+    # No healthcheck on purpose: the Gatus image is built FROM scratch and has
+    # no shell and no HTTP client binary, so any exec-based check can never
+    # pass. Probe http://<host>:8080/health from outside (another monitor,
+    # your proxy, a cron job) if you need a liveness signal.
+
+volumes:
+  gatus-data:

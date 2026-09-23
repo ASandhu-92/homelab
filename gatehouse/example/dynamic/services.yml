@@ -1,0 +1,53 @@
+# Example Traefik dynamic config: the internal routers gatehouse copies from.
+# Every router here is on the LAN entrypoint only.
+http:
+  routers:
+    docs:
+      entryPoints: [websecure]
+      rule: Host(`docs.example.com`)
+      service: docs
+      middlewares: [crowdsec, authelia]
+      tls:
+        certResolver: letsencrypt
+    media:
+      entryPoints: [websecure]
+      rule: Host(`media.example.com`)
+      service: media
+      middlewares: [crowdsec]
+      tls:
+        certResolver: letsencrypt
+    # Two routers for one host: both get an -ext copy when the host is public.
+    media-api:
+      entryPoints: [websecure]
+      rule: Host(`media.example.com`) && PathPrefix(`/api`)
+      priority: 100
+      service: media
+      tls:
+        certResolver: letsencrypt
+    remote:
+      entryPoints: [websecure]
+      rule: Host(`remote.example.com`)
+      service: remote
+      middlewares: [crowdsec]
+      tls:
+        certResolver: letsencrypt
+    admin:
+      entryPoints: [websecure]
+      rule: Host(`admin.example.com`)
+      service: admin
+      middlewares: [crowdsec, authelia]
+      tls:
+        certResolver: letsencrypt
+  services:
+    docs:
+      loadBalancer:
+        servers: [{url: "http://192.0.2.21:8080"}]
+    media:
+      loadBalancer:
+        servers: [{url: "http://192.0.2.22:8096"}]
+    remote:
+      loadBalancer:
+        servers: [{url: "http://192.0.2.23:3080"}]
+    admin:
+      loadBalancer:
+        servers: [{url: "http://192.0.2.24:9000"}]

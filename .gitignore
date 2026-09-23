@@ -27,3 +27,7 @@ users_database.yml
 .DS_Store
 *.swp
 *~
+
+# Files generated from the examples during setup
+netbird/config.yaml
+teleport/teleport.yaml

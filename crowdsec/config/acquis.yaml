@@ -1,0 +1,8 @@
+# What CrowdSec reads. Here: the stdout of the container named "traefik",
+# fetched through the Docker API, parsed as Traefik access logs.
+# Traefik must run with --accesslog=true (the traefik folder does).
+source: docker
+container_name:
+  - traefik
+labels:
+  type: traefik

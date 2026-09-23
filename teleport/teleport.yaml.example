@@ -1,0 +1,29 @@
+# Teleport cluster config (auth + proxy). Copy to teleport.yaml.
+version: v3
+teleport:
+  nodename: teleport
+  data_dir: /var/lib/teleport
+  log:
+    output: stdout
+    severity: INFO
+
+auth_service:
+  enabled: true
+  cluster_name: lab
+  listen_addr: 0.0.0.0:3025
+
+proxy_service:
+  enabled: true
+  web_listen_addr: 0.0.0.0:3080
+  # The public name users and tsh connect to, through the reverse proxy.
+  public_addr: tp.example.com:443
+  tunnel_public_addr: tp.example.com:443
+  listen_addr: 0.0.0.0:3023
+  ssh_public_addr: tp.example.com:3023
+
+# The cluster host is itself a node you can log in to.
+ssh_service:
+  enabled: true
+  labels:
+    env: lab
+    role: server

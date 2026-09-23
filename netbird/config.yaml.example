@@ -1,0 +1,36 @@
+# NetBird combined server config. setup-secrets.sh copies this to config.yaml
+# and fills in the two __PLACEHOLDERS__ with random values.
+server:
+  listenAddress: ":80"                      # plain HTTP; Traefik terminates TLS
+  # The public URL peers and browsers use. Management, signal, relay and the
+  # IdP issuer are all derived from it.
+  exposedAddress: "https://nb.example.com"
+  metricsPort: 9090
+  healthcheckAddress: ":9000"
+  logLevel: "info"
+  logFile: "console"
+  # Shared secret the relay uses to authenticate peers.
+  authSecret: "__RELAY_SECRET__"
+  dataDir: "/var/lib/netbird"
+
+  stuns:
+    - uri: "stun:stun.l.google.com:19302"
+      proto: "udp"
+
+  auth:                                     # embedded IdP (no external OIDC)
+    issuer: "https://nb.example.com/oauth2"
+    dashboardRedirectURIs:
+      - "https://nb.example.com/nb-auth"
+      - "https://nb.example.com/nb-silent-auth"
+    cliRedirectURIs:
+      - "http://localhost:53000/"
+
+  reverseProxy:
+    # Only trust X-Forwarded-For from the proxy host.
+    trustedHTTPProxies:
+      - "192.0.2.10/32"
+
+  store:
+    engine: "sqlite"
+    # Encrypts sensitive columns in the store. Losing it loses them.
+    encryptionKey: "__ENC_KEY__"

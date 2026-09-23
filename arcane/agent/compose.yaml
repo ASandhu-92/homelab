@@ -1,0 +1,42 @@
+# Arcane edge agent: runs on every Docker host except the manager's.
+#
+# Edge mode: the agent dials OUT to the manager over a websocket. No inbound
+# port on the node, nothing to firewall, and a node that reboots re-attaches
+# on its own.
+#
+# Order matters: create the environment in the Arcane UI first, save the
+# token it shows (it is shown once) into ./secrets/agent_token, then start
+# the agent. An agent started before its environment exists stays "Pending".
+
+services:
+  arcane-agent:
+    image: ghcr.io/getarcaneapp/agent:v2.8.0
+    container_name: arcane-agent
+    restart: unless-stopped
+    user: "0:0"
+    environment:
+      - EDGE_AGENT=true
+      - EDGE_TRANSPORT=websocket
+      # The manager's LAN address, not its public SSO-protected hostname.
+      # The SSO middleware answers agent calls with a login redirect and the
+      # environment stays Offline forever.
+      - MANAGER_API_URL=${MANAGER_API_URL}
+      - AGENT_TOKEN_FILE=/run/secrets/agent_token
+      - PROJECTS_DIRECTORY=${STACKS_DIR}
+      - PUID=0
+      - PGID=0
+      - TZ=${TZ:-UTC}
+      - LOG_LEVEL=info
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+      # mkdir -p secrets; printf %s '<from the UI>' > secrets/agent_token
+      # chmod 600 secrets/agent_token   (no trailing newline)
+      - ./secrets/agent_token:/run/secrets/agent_token:ro
+      - ${STACKS_DIR}:${STACKS_DIR}
+    cgroup: host
+    # On a Proxmox LXC add, for CPU and process metrics:
+    #   pid: host
+    #   volumes: [ "/proc:/proc" ]
+    # On an SELinux host, only if the agent cannot read the socket:
+    #   security_opt: [ "label=disable" ]

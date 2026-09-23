@@ -1,0 +1,39 @@
+# Traefik file-provider route for keyvault. LAN entrypoint only; never give
+# this host an internet-facing router.
+http:
+  routers:
+    keyvault:
+      entryPoints: [websecure]
+      rule: Host(`kv.example.com`)
+      # crowdsec first, then SSO (sets Remote-User), then the edge marker.
+      middlewares: [crowdsec, authelia, no-cache, kv-edge]
+      service: keyvault
+      tls:
+        certResolver: letsencrypt
+    keyvault-healthz:
+      entryPoints: [websecure]
+      rule: Host(`kv.example.com`) && Path(`/healthz`)
+      priority: 100
+      middlewares: [crowdsec, no-cache]
+      service: keyvault
+      tls:
+        certResolver: letsencrypt
+  middlewares:
+    # Proves to keyvault that the request came through this router (and so
+    # through SSO). Traefik overwrites any copy a client sends. Use the same
+    # random value as KV_EDGE_SECRET; keep this file readable by root only.
+    kv-edge:
+      headers:
+        customRequestHeaders:
+          X-Kv-Edge: "CHANGE_ME"
+    no-cache:
+      headers:
+        customResponseHeaders:
+          Cache-Control: "no-store"
+  services:
+    keyvault:
+      loadBalancer:
+        servers:
+          # The proxy network's gateway address on the host, where the
+          # service binds (KV_BIND).
+          - url: http://172.24.0.1:8094

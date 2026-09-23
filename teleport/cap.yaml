@@ -1,0 +1,13 @@
+# Cluster auth preference: require a second factor for every login.
+# Dynamic resource, applied with tctl, no restart needed:
+#   docker exec -i teleport tctl create -f < cap.yaml
+# (pipe it on stdin: the distroless container cannot see the host's files)
+kind: cluster_auth_preference
+version: v2
+metadata:
+  name: cluster-auth-preference
+spec:
+  type: local
+  second_factors: ["otp", "webauthn"]
+  webauthn:
+    rp_id: tp.example.com

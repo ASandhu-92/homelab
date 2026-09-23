@@ -1,0 +1,67 @@
+# NetBird self-hosted, the all-in-one way: one "combined" server container
+# (management, signal, relay and an embedded identity provider, all on one
+# HTTP port) plus the web dashboard. Traefik in front terminates TLS.
+#
+# I run this in its own small LXC. Both ports are bound to that LXC's LAN
+# address and only Traefik talks to them.
+
+services:
+  netbird-server:
+    image: netbirdio/netbird-server:0.79.0
+    container_name: netbird-server
+    restart: unless-stopped
+    ports:
+      # Plain HTTP; Traefik terminates TLS and must speak h2c to the gRPC
+      # paths (see traefik/netbird.yml).
+      - "${BIND_IP}:8081:80"
+      # STUN for NAT traversal, direct to the internet (not through Traefik).
+      # Omit if you rely on a public STUN server, as config.yaml.example does.
+      # - "3478:3478/udp"
+    volumes:
+      # SQLite stores: peers and accounts (store.db), the embedded IdP's users,
+      # passwords and MFA (idp.db), and events. Back this volume up.
+      - netbird-data:/var/lib/netbird
+      # Generated from config.yaml.example by setup-secrets.sh (git-ignored).
+      - ./config.yaml:/etc/netbird/config.yaml:ro
+    command: ["--config", "/etc/netbird/config.yaml"]
+    # No healthcheck: the image has a shell but no HTTP client. config.yaml
+    # sets healthcheckAddress :9000, but in testing it did not answer
+    # reliably, so monitor https://<host>/oauth2/.well-known/openid-configuration
+    # (200 with JSON) from outside instead.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "2" }
+
+  dashboard:
+    image: netbirdio/dashboard:v2.92.0
+    container_name: netbird-dashboard
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP}:8080:80"
+    environment:
+      # Where the dashboard's browser code finds the API.
+      NETBIRD_MGMT_API_ENDPOINT: https://${NB_DOMAIN}
+      NETBIRD_MGMT_GRPC_API_ENDPOINT: https://${NB_DOMAIN}
+      # The embedded IdP (issuer is <exposed URL>/oauth2).
+      AUTH_AUTHORITY: https://${NB_DOMAIN}/oauth2
+      AUTH_AUDIENCE: netbird-dashboard
+      AUTH_CLIENT_ID: netbird-dashboard
+      AUTH_SUPPORTED_SCOPES: openid profile email groups
+      AUTH_REDIRECT_URI: /nb-auth
+      AUTH_SILENT_REDIRECT_URI: /nb-silent-auth
+      USE_AUTH0: "false"
+      # TLS is Traefik's job; the container serves plain HTTP.
+      LETSENCRYPT_DOMAIN: none
+      NGINX_SSL_PORT: "443"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "2" }
+
+volumes:
+  netbird-data:

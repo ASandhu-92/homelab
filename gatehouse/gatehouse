@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""gatehouse: make a site public or LAN-only.
+
+  gatehouse list                 every host, its state, and whether it is protected
+  gatehouse public  <host...>    expose host(s) on the internet entrypoint
+  gatehouse private <host...>    hide host(s) from the internet; LAN and VPN keep working
+  gatehouse panic                hide every host that is not protected; remembers the list
+  gatehouse restore              undo the last panic
+  gatehouse protect <host>       never hide this host in a panic (for example the
+                                 hostname your remote-access path depends on)
+  gatehouse reconcile            regenerate gatehouse.yml from the current state
+
+Every change is written to the state file and reconciled at once; Traefik
+picks up the new gatehouse.yml within a few seconds. Settings are the
+GATEHOUSE_* environment variables described in reconcile.py.
+"""
+import json
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import reconcile  # noqa: E402
+
+
+def state_path():
+    return reconcile.settings()["state"]
+
+
+def load():
+    try:
+        with open(state_path()) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {"hosts": {}, "panic_prev": None}
+
+
+def save(d):
+    p = state_path()
+    os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+    tmp = p + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(d, f, indent=1, sort_keys=True)
+        f.write("\n")
+    os.replace(tmp, p)
+
+
+def stamp(d, host, who="cli"):
+    h = d["hosts"].setdefault(host, {})
+    h["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    h["updated_by"] = who
+
+
+def set_state(d, hosts, state):
+    for h in hosts:
+        d["hosts"].setdefault(h, {})["state"] = state
+        stamp(d, h)
+
+
+def cmd_list(d):
+    rows = sorted(d["hosts"].items())
+    w = max((len(h) for h, _ in rows), default=4)
+    print(f"{'HOST'.ljust(w)}  STATE    PROTECTED")
+    for h, s in rows:
+        print(f"{h.ljust(w)}  {s.get('state', '?').ljust(7)}  {'yes' if s.get('protected') else '-'}")
+    pub = sum(1 for _, s in rows if s.get("state") == "PUBLIC")
+    print(f"\n{pub} public / {len(rows)} total")
+
+
+def main(argv):
+    if not argv:
+        print(__doc__)
+        return 2
+    d, c = load(), argv[0]
+    if c == "list":
+        cmd_list(d)
+        return 0
+    if c in ("public", "private"):
+        if len(argv) < 2:
+            sys.exit(f"usage: gatehouse {c} <host...>")
+        set_state(d, argv[1:], c.upper())
+        save(d)
+        print(reconcile.reconcile())
+        return 0
+    if c == "protect":
+        if len(argv) < 2:
+            sys.exit("usage: gatehouse protect <host...>")
+        for h in argv[1:]:
+            d["hosts"].setdefault(h, {})["protected"] = True
+            stamp(d, h)
+        save(d)
+        return 0
+    if c == "panic":
+        prev = sorted(h for h, s in d["hosts"].items() if s.get("state") == "PUBLIC")
+        hidden = [h for h in prev if not d["hosts"][h].get("protected")]
+        set_state(d, hidden, "PRIVATE")
+        d["panic_prev"] = prev
+        save(d)
+        print(reconcile.reconcile())
+        print(f"PANIC: hid {len(hidden)} hosts; kept protected: {sorted(set(prev) - set(hidden))}")
+        return 0
+    if c == "restore":
+        prev = d.get("panic_prev") or []
+        set_state(d, prev, "PUBLIC")
+        d["panic_prev"] = None
+        save(d)
+        print(reconcile.reconcile())
+        print(f"restored {len(prev)} hosts to PUBLIC")
+        return 0
+    if c == "reconcile":
+        print(reconcile.reconcile(dry_run="--dry-run" in argv[1:]))
+        return 0
+    sys.exit(f"unknown command: {c}")
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

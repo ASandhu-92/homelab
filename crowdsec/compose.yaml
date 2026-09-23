@@ -1,0 +1,60 @@
+# CrowdSec engine + Traefik forward-auth bouncer.
+#
+# The engine reads Traefik's access log (straight from the Traefik
+# container's stdout through the Docker API), matches it against scenarios
+# such as HTTP probing and brute force, and keeps a list of banned IPs. The
+# bouncer is a tiny HTTP service Traefik calls on every request (forwardAuth
+# middleware); it answers 200 for a clean client and 403 for a banned one.
+
+networks:
+  proxy:
+    external: true
+    name: proxy          # the network Traefik is on (see the traefik folder)
+
+services:
+  crowdsec:
+    image: crowdsecurity/crowdsec:v1.8.1
+    container_name: crowdsec
+    restart: unless-stopped
+    environment:
+      # Hub collection with the Traefik log parser and HTTP scenarios.
+      COLLECTIONS: crowdsecurity/traefik
+      # Registers the bouncer's API key on start, so there is no manual
+      # `cscli bouncers add` step. Same value as the bouncer's key below.
+      BOUNCER_KEY_traefik: ${CROWDSEC_BOUNCER_KEY}
+      TZ: ${TZ:-UTC}
+    volumes:
+      # Read-only socket: the docker acquisition source tails container logs.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      # Path-scoped whitelist (see README, "Banning your own users").
+      - ./config/parsers/s02-enrich/media-artwork-whitelist.yaml:/etc/crowdsec/parsers/s02-enrich/media-artwork-whitelist.yaml:ro
+      - crowdsec-config:/etc/crowdsec
+      - crowdsec-data:/var/lib/crowdsec/data
+    networks:
+      - proxy
+    healthcheck:
+      test: ["CMD", "cscli", "lapi", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  bouncer:
+    image: fbonalair/traefik-crowdsec-bouncer:0.5.0
+    container_name: crowdsec-bouncer
+    restart: unless-stopped
+    environment:
+      CROWDSEC_BOUNCER_API_KEY: ${CROWDSEC_BOUNCER_KEY}
+      CROWDSEC_AGENT_HOST: crowdsec:8080
+      GIN_MODE: release
+    networks:
+      - proxy
+    depends_on:
+      crowdsec:
+        condition: service_healthy
+    # The image ships its own HEALTHCHECK (/healthchecker), no need to add one.
+
+volumes:
+  crowdsec-config:
+  crowdsec-data:

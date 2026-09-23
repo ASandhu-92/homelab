@@ -1,84 +1,91 @@
-# homelab-boilerplates
+# homelab
 
-> Production-tested self-hosted infrastructure templates for a Docker homelab.
+[![validate](https://github.com/ASandhu-92/homelab/actions/workflows/validate.yml/badge.svg)](https://github.com/ASandhu-92/homelab/actions/workflows/validate.yml)
+[![leak-scan](https://github.com/ASandhu-92/homelab/actions/workflows/leak-scan.yml/badge.svg)](https://github.com/ASandhu-92/homelab/actions/workflows/leak-scan.yml)
 
-## What this is
+Configs from the homelab I run at home: two Proxmox hosts, a handful of
+Docker hosts, and the services on them. One folder per service. Real names,
+addresses and secrets are replaced with placeholders, so each folder can be
+copied and adapted. The READMEs say what I ran to test each one and what I
+did not.
 
-Nine deployment templates distilled from a real, long-running homelab. Every
-template here has run in production: reverse proxying, single sign-on,
-network-wide DNS, uptime monitoring, backups, workflow automation, private
-search, a browser IDE, and home automation.
+## Index
 
-Nothing in this repo contains real hostnames, IPs, domains, or secrets. Every
-example uses placeholder values (`example.com`, TEST-NET `192.0.2.0/24`,
-`admin@example.com`) so the templates can be lifted directly into your own
-environment and customized.
+| Folder | What it is | Tested here |
+|--------|------------|-------------|
+| **Ingress and access** | | |
+| [traefik](traefik/) | Reverse proxy, Let's Encrypt DNS-01 certificates, read-only Docker socket proxy | started, healthy |
+| [authelia](authelia/) | Single sign-on and two-factor login in front of the proxy | started, healthy |
+| [gatehouse](gatehouse/) | My tool: make a site public or LAN-only by generating Traefik routers on a second entrypoint, plus a postmortem | unit tests |
+| [teleport](teleport/) | Certificate-based SSH for every machine, instead of SSH keys | cluster up, node joined |
+| **Security** | | |
+| [crowdsec](crowdsec/) | Bans abusive IPs from Traefik's access log; the lesson about banning your own users | started, bans enforced |
+| [keyvault](keyvault/) | My tool: add or rotate a key in a SOPS-encrypted file without the value touching disk, argv or logs | tests with real sops |
+| **DNS and network** | | |
+| [technitium](technitium/) | Recursive DNS with blocklists and a split-brain zone for the lab domain | started, zone answers checked |
+| [adguard-home](adguard-home/) | The DNS server I used before Technitium | started, healthy after setup |
+| [netbird](netbird/) | Self-hosted WireGuard mesh VPN with its own identity provider | started, API answering |
+| **Monitoring and backup** | | |
+| [gatus](gatus/) | Uptime checks and status page, config in one YAML file | started, responding |
+| [kopia](kopia/) | Encrypted, deduplicated backups with a web UI | started, healthy after repo create |
+| **Automation and AI** | | |
+| [n8n](n8n/) | Workflow automation on Postgres | started, responding |
+| [local-ai](local-ai/) | Ollama models behind a LiteLLM gateway with a cache, and a search-grounded chat UI | started, chat through the gateway |
+| [searxng](searxng/) | Private metasearch, with a JSON API for the AI tools | started, JSON search answered |
+| **Apps** | | |
+| [code-server](code-server/) | VS Code in the browser, auth left to the proxy | started, healthy |
+| [home-assistant](home-assistant/) | Home automation | started, healthy (bridge network in the test) |
+| **Proxmox** | | |
+| [proxmox](proxmox/) | Unprivileged LXCs with Docker, shared bind mounts with ACLs, VM settings | notes only |
+| [arcane](arcane/) | Web UI for Docker and compose across all the hosts, with edge agents | manager started, healthy |
 
-## Services
+"Tested here" means I started the folder's compose file on a test Docker
+host with the published ports removed and dummy secrets, and checked the
+result named in the column. Each README has the details and the gaps.
 
-| Service | What it does |
-|---------|--------------|
-| `traefik` | Reverse proxy, TLS termination, Let's Encrypt DNS-01, Authelia middleware chain |
-| `authelia` | Single sign-on + TOTP 2FA forward-auth portal |
-| `adguard-home` | Network-wide DNS, ad/tracker blocking, wildcard rewrite for LAN service resolution |
-| `gatus` | Uptime and health monitoring with alerting |
-| `kopia` | Encrypted, deduplicated backups with retention policies |
-| `n8n` | Self-hosted workflow automation |
-| `searxng` | Private metasearch engine |
-| `code-server` | Browser-based VS Code development environment |
-| `home-assistant` | Home automation hub |
+## Placeholders
 
-Each service directory is self-contained: a valid `compose.yaml`, an
-`.env.example`, supporting config, and a README following a
-What / Why / Files / Usage / Integration structure.
+| Placeholder | Stands for |
+|-------------|------------|
+| `example.com`, `*.example.com` | the lab domain |
+| `192.0.2.0/24` | LAN addresses (TEST-NET-1, never routed) |
+| `hv-1`, `hv-2` | Proxmox hosts |
+| `workstation-a` | a desktop machine |
+| `/srv/...` | host paths |
+| empty value or `CHANGE_ME` in `.env.example` | a secret you generate |
 
-## Placeholder convention
-
-Every domain is `example.com`, every LAN address is inside the TEST-NET-1
-range `192.0.2.0/24`, and every host name is generic (`hv-1`, `hv-2`,
-`workstation-a`). Secret-shaped values in `.env.example` files are either
-empty or an obvious short placeholder such as `CHANGE_ME`, never a
-real-looking value, so a leak scanner never has to guess what is a
-placeholder and what is real. Copy `.env.example` to `.env`, fill in your own
-values, and `.env` stays out of git (see `.gitignore`).
-
-## CI leak scanning
-
-`.github/workflows/leak-scan.yml` runs gitleaks on every push and pull
-request, using `.gitleaks.toml` plus the built-in ruleset. It also supports an
-optional `GITLEAKS_PRIVATE_CONFIG` repository secret for a stricter, private
-ruleset that never has to be disclosed in this public repo.
-
-## Quickstart
+## Using a folder
 
 ```bash
-# 1. Pick a service
-cd boilerplates/traefik
-
-# 2. Copy and fill in the environment template
-cp .env.example .env
-$EDITOR .env            # set your domain + Cloudflare API token
-
-# 3. Review the compose file and adjust volumes/ports for your host
-$EDITOR compose.yaml
-
-# 4. Bring it up
+cd traefik
+cp .env.example .env        # fill in; .env is git-ignored
+$EDITOR compose.yaml        # adjust ports, paths, networks for your host
 docker compose up -d
-
-# 5. Check logs
 docker compose logs -f
 ```
 
-Deploy `traefik` and `authelia` first, most other services route through
-them. Read each service README before deploying; the Integration section
-explains how the pieces connect.
+Start with `traefik` and `authelia`; most other folders assume a `proxy`
+network and route through them. Each README has What, Why, Files, Usage and
+Integration sections.
 
-## A note on how these were made
+## CI
 
-Templates drafted with Claude Code from stacks I run, reviewed and maintained
-by me.
+- **validate** (`.github/workflows/validate.yml`): `scripts/validate.sh` runs
+  `docker compose config` on every compose file with its `.env.example`;
+  a Trivy scan of the repo files (secrets and misconfiguration) that fails on
+  HIGH or CRITICAL; and a Trivy scan of every pinned image as a report only,
+  so upstream CVEs do not fail the build.
+- **leak-scan** (`.github/workflows/leak-scan.yml`): gitleaks over the full
+  history with `.gitleaks.toml`, plus a private ruleset from a repository
+  secret when present.
+
+Run the compose check locally with `./scripts/validate.sh`.
+
+## Credit
+
+Written and tested with Claude Code from the stacks I run; reviewed and
+maintained by me.
 
 ## License
 
-MIT. See [LICENSE](./LICENSE). Templates are provided as-is; review and adapt
-security-sensitive settings for your own threat model before production use.
+MIT. See [LICENSE](LICENSE).

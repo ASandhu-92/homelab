@@ -1,0 +1,26 @@
+{
+ "hosts": {
+  "docs.example.com": {
+   "state": "PUBLIC",
+   "updated_at": "2026-07-10T05:30:00Z",
+   "updated_by": "seed"
+  },
+  "media.example.com": {
+   "state": "PUBLIC",
+   "updated_at": "2026-07-10T05:30:00Z",
+   "updated_by": "seed"
+  },
+  "remote.example.com": {
+   "protected": true,
+   "state": "PUBLIC",
+   "updated_at": "2026-07-10T05:30:00Z",
+   "updated_by": "seed"
+  },
+  "admin.example.com": {
+   "state": "PRIVATE",
+   "updated_at": "2026-07-10T05:30:00Z",
+   "updated_by": "seed"
+  }
+ },
+ "panic_prev": null
+}

@@ -1,0 +1,13 @@
+name: local/media-artwork-whitelist
+description: >-
+  Media server artwork 404s are not probing. A media library whose cached
+  images are missing (for example after restoring its config without the
+  metadata folder) returns dozens of 404s per screen for poster and backdrop
+  URLs. Without this, crowdsecurity/http-probing bans the people watching.
+whitelist:
+  reason: "media server artwork 404"
+  expression:
+    # Scoped to a 404 on the artwork paths only. Every other 404 from the same
+    # client still counts toward http-probing.
+    - evt.Meta.http_status == '404' && evt.Meta.http_path matches '(?i)^/items/[a-f0-9-]{32,36}/images/'
+    - evt.Meta.http_status == '404' && evt.Meta.http_path matches '(?i)^/users/[a-f0-9-]{32,36}/images/'

@@ -1,0 +1,44 @@
+# Traefik file-provider routes for NetBird. One hostname, three routers by
+# path. Copy into Traefik's dynamic/ directory.
+http:
+  routers:
+    # gRPC (management and signal). Needs HTTP/2 cleartext to the backend.
+    netbird-grpc:
+      rule: "Host(`nb.example.com`) && (PathPrefix(`/signalexchange.SignalExchange/`) || PathPrefix(`/management.ManagementService/`) || PathPrefix(`/management.ProxyService/`))"
+      entryPoints: [websecure]
+      service: netbird-server-h2c
+      priority: 100
+      tls:
+        certResolver: letsencrypt
+
+    # REST API, embedded IdP (/oauth2), relay and websocket fallbacks.
+    netbird-backend:
+      rule: "Host(`nb.example.com`) && (PathPrefix(`/relay`) || PathPrefix(`/ws-proxy/`) || PathPrefix(`/api`) || PathPrefix(`/oauth2`))"
+      entryPoints: [websecure]
+      service: netbird-server
+      priority: 100
+      tls:
+        certResolver: letsencrypt
+
+    # Everything else on the host is the dashboard.
+    netbird-dashboard:
+      rule: "Host(`nb.example.com`)"
+      entryPoints: [websecure]
+      service: netbird-dashboard
+      priority: 1
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    netbird-server:
+      loadBalancer:
+        servers:
+          - url: "http://192.0.2.20:8081"
+    netbird-server-h2c:
+      loadBalancer:
+        servers:
+          - url: "h2c://192.0.2.20:8081"
+    netbird-dashboard:
+      loadBalancer:
+        servers:
+          - url: "http://192.0.2.20:8080"

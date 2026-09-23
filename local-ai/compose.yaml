@@ -1,0 +1,90 @@
+# Local AI stack: Ollama runs the models, LiteLLM puts one OpenAI-compatible
+# API with one key in front of them, and Vane (a slim Perplexica fork) is a
+# web UI for AI answers grounded in web search through SearXNG.
+#
+# In my lab these are split: Ollama runs on the workstation with the GPU,
+# LiteLLM and Vane on the main Docker host. One compose file here so the
+# whole path can be brought up and tested on one machine. To split it, run
+# `docker compose up -d ollama` on the GPU box and point config.yaml's
+# api_base at that host.
+
+services:
+  ollama:
+    image: ollama/ollama:0.34.3
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      # LAN only. Ollama has no authentication; LiteLLM is the front door.
+      - "${BIND_IP}:11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    # NVIDIA GPU. Needs the NVIDIA Container Toolkit on the host. Remove this
+    # block to run on CPU (slow, but it works for small models).
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  litellm:
+    # Stable-branch build; "main-stable" is a moving tag, this is its pin.
+    image: ghcr.io/berriai/litellm:main-v1.83.14-stable
+    container_name: litellm
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
+    ports:
+      - "${BIND_IP}:4000:4000"
+    environment:
+      # Clients send this as their API key (Authorization: Bearer ...).
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    depends_on:
+      cache:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Response cache for LiteLLM (Redis protocol). Identical prompts within the
+  # TTL are answered from here without touching a GPU.
+  cache:
+    image: valkey/valkey:9-alpine
+    container_name: litellm-cache
+    restart: unless-stopped
+    command: valkey-server --save "" --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  vane:
+    # Pinned by digest: the project publishes moving tags only for recent builds.
+    image: itzcrazykns1337/vane:slim-latest@sha256:21759f5428af08a6fcc0caadd96f2a604813100fc96ae9f127804b72e8e976ac
+    container_name: vane
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP}:3300:3000"
+    environment:
+      # The JSON API of a SearXNG instance (see the searxng folder; its
+      # limiter.toml must let this host through).
+      SEARXNG_API_URL: ${SEARXNG_API_URL}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - vane-data:/home/vane/data
+
+volumes:
+  ollama-models:
+  vane-data:

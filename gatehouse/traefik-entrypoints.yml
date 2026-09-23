@@ -1,0 +1,22 @@
+# Traefik static config fragment (traefik.yml) for gatehouse: a second HTTPS
+# entrypoint that only the public tunnel reaches.
+entryPoints:
+  websecure:
+    address: ":443"          # LAN and VPN clients; every router lives here
+  websecure-ext:
+    address: ":9443"         # internet traffic only, via the tunnel
+    forwardedHeaders:
+      # The tunnel daemon runs on this host and connects from loopback.
+      trustedIPs:
+        - "127.0.0.1/32"
+
+# Tunnel side (for example cloudflared's config.yml): send every public
+# hostname to :9443, never to :443. Routers with no -ext copy then 404 on
+# the internet path while still working on the LAN.
+#
+#   ingress:
+#     - hostname: docs.example.com
+#       service: https://127.0.0.1:9443
+#       originRequest:
+#         originServerName: docs.example.com
+#     - service: http_status:404

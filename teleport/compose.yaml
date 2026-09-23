@@ -1,0 +1,22 @@
+# Teleport cluster: auth service + proxy (web UI and SSH proxy) in one
+# container, the distroless image. Every other machine runs a node agent
+# (see node/) that registers with the auth service.
+
+services:
+  teleport:
+    image: public.ecr.aws/gravitational/teleport-distroless:18.11.0
+    container_name: teleport
+    hostname: teleport
+    restart: unless-stopped
+    ports:
+      - "3080:3080"   # web UI and API; the reverse proxy forwards the public name here
+      - "3023:3023"   # SSH proxy
+      - "3025:3025"   # auth service; LAN nodes register here directly
+    volumes:
+      - ./teleport.yaml:/etc/teleport/teleport.yaml:ro
+      - teleport-data:/var/lib/teleport
+    # No healthcheck: the image is distroless (no shell, no HTTP client).
+    # Check it with `docker exec teleport tctl status`.
+
+volumes:
+  teleport-data:

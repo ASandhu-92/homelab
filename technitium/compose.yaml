@@ -1,0 +1,48 @@
+# Technitium DNS Server: recursive resolver with DNSSEC, blocklists and a
+# split-brain zone for the lab domain.
+#
+# I run Technitium natively in a small unprivileged LXC, not in Docker. This
+# compose file is the Docker equivalent of that setup: same version, same
+# recursion and blocking settings. The environment variables below are only
+# read on the very first start (empty /etc/dns). After that the settings live
+# in the config volume and you change them in the web console or the API.
+
+services:
+  dns:
+    image: technitium/dns-server:15.4.0
+    container_name: technitium
+    hostname: dns
+    restart: unless-stopped
+    ports:
+      # DNS for the LAN. On a host that already runs a stub resolver on :53
+      # (systemd-resolved), bind these to the host's LAN address instead,
+      # for example "192.0.2.53:53:53/udp".
+      - "53:53/udp"
+      - "53:53/tcp"
+      # Web console. Put it behind the reverse proxy and SSO; do not publish
+      # it beyond the LAN.
+      - "5380:5380/tcp"
+    environment:
+      DNS_SERVER_DOMAIN: ${DNS_SERVER_DOMAIN}
+      DNS_SERVER_ADMIN_PASSWORD: ${DNS_SERVER_ADMIN_PASSWORD}
+      # Recursive resolver: walk from the root servers itself, no forwarders.
+      # Never forward to your router if the router forwards back here (see
+      # README, "The forwarding loop").
+      DNS_SERVER_RECURSION: AllowOnlyForPrivateNetworks
+      DNS_SERVER_ENABLE_BLOCKING: "true"
+      # Comma-separated blocklist URLs, refreshed daily by the server.
+      DNS_SERVER_BLOCK_LIST_URLS: ${DNS_SERVER_BLOCK_LIST_URLS}
+      DNS_SERVER_LOG_USING_LOCAL_TIME: "true"
+      TZ: ${TZ:-UTC}
+    volumes:
+      - technitium-config:/etc/dns
+    healthcheck:
+      # The image ships dig. A local name the server always answers.
+      test: ["CMD", "dig", "+short", "+time=2", "+tries=1", "@127.0.0.1", "localhost", "A"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  technitium-config:

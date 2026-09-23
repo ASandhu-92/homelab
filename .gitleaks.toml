@@ -1,4 +1,4 @@
-# gitleaks configuration for the homelab-boilerplates repo.
+# gitleaks configuration for the homelab repo.
 # Extends the upstream default ruleset with custom rules that catch
 # private, environment-specific identifiers which must never be published.
 #
@@ -20,6 +20,18 @@ id = "rfc1918-ip"
 description = "Other RFC1918 private address leak"
 regex = '''\b(10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b'''
 tags = ["homelab", "lan-ip"]
+# Docker bridge networks, not LAN addresses: 172.16.0.0/12 is the range
+# Docker allocates bridges from (used as a trusted-proxy range), and
+# 172.24.0.0/16 with gateway 172.24.0.1 is the reverse proxy's example bridge
+# network in the keyvault folder.
+[[rules.allowlists]]
+# Match against the whole matched address (the rule's capture group would
+# otherwise make the "secret" only the first two octets).
+regexTarget = "match"
+regexes = [
+  '''^172\.16\.0\.0$''',
+  '''^172\.24\.0\.[01]$''',
+]
 
 # NOTE: environment-specific identity patterns (private domain, hostnames,
 # personal identifiers) are intentionally NOT in this public file: they are

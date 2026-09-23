@@ -1,0 +1,55 @@
+# Arcane manager: a web UI for Docker hosts and compose projects.
+# One manager on the main Docker host; every other host runs the edge agent
+# in agent/compose.yaml and dials in to it.
+#
+# Every setting below is there for a reason; see README "Why" before changing.
+
+services:
+  arcane:
+    # Pin the tag. On GHCR the "v" prefix is part of the tag (a bare 2.8.0
+    # does not exist). ghcr.io/getarcaneapp/manager is the canonical image.
+    image: ghcr.io/getarcaneapp/manager:v2.8.0
+    container_name: arcane
+    restart: unless-stopped
+    # The image already defaults to root; stated here because the stacks
+    # directory and its .env files are root-owned on the host.
+    user: "0:0"
+    ports:
+      - "3552:3552"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Bind mount (not a named volume) so the host backup job picks it up.
+      - ./data:/app/data
+      # Identity mount: same absolute path inside and outside. Arcane runs
+      # compose against the host daemon, so a stack's relative bind mount
+      # (./config:/config) is resolved by the host. A different path inside
+      # the container breaks every stack that uses one.
+      - ${STACKS_DIR}:${STACKS_DIR}
+      # Secrets as files, never inline in compose or .env.
+      - ./secrets:/run/secrets/arcane:ro
+    environment:
+      # Must be the exact URL the browser uses: no port, no trailing slash.
+      # It is the CSRF trusted origin and the source of the websocket address.
+      # Wrong value = 403 "Cross-origin request blocked" on every change.
+      - APP_URL=${APP_URL}
+      - PROJECTS_DIRECTORY=${STACKS_DIR}
+      # Traefik reaches Arcane through a Docker bridge address. Without this
+      # every user is rate limited as one IP and the session cookie is not
+      # marked Secure behind TLS.
+      - TRUSTED_PROXIES=172.16.0.0/12
+      - ENCRYPTION_KEY_FILE=/run/secrets/arcane/encryption_key
+      - JWT_SECRET_FILE=/run/secrets/arcane/jwt_secret
+      - PUID=0
+      - PGID=0
+      - TZ=${TZ:-UTC}
+      - LOG_LEVEL=info
+    # Lets Arcane find its own container id (used by self-upgrade).
+    cgroup: host
+    healthcheck:
+      # The image has no HEALTHCHECK and no shell (distroless), so use the
+      # exec form of its own health subcommand.
+      test: ["CMD", "./arcane", "health", "--timeout", "2s"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s

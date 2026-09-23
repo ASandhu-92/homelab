@@ -1,0 +1,28 @@
+# Teleport node agent config. Copy to /etc/teleport.yaml on the machine.
+version: v3
+teleport:
+  nodename: hv-1
+  data_dir: /var/lib/teleport
+  # Join token from `tctl tokens add --type=node --ttl=1h`, in a root-only
+  # file rather than inline. Only needed for the first join.
+  auth_token: /var/lib/teleport/join-token
+  # LAN nodes register with the auth service directly on 3025, not through
+  # the proxy's public name on 443 (see README).
+  auth_server: 192.0.2.10:3025
+  # Pins the cluster CA so the node cannot be pointed at an impostor.
+  # From `tctl status`.
+  ca_pin: "sha256:REPLACE_WITH_CA_PIN_FROM_TCTL_STATUS"
+  log:
+    output: stderr
+    severity: INFO
+
+ssh_service:
+  enabled: true
+  labels:
+    env: lab
+    agent-access: "true"
+
+auth_service:
+  enabled: false
+proxy_service:
+  enabled: false

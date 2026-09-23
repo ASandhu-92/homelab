@@ -1,0 +1,22 @@
+# SearXNG bot-detection / rate limiter settings (read because settings.yml
+# has server.limiter: true).
+#
+# Without this file the limiter sees every request as coming from the reverse
+# proxy and answers API clients (a local AI app calling format=json) with
+# 429 Too Many Requests.
+
+[botdetection]
+# Networks allowed to set X-Forwarded-For / X-Real-IP. Loopback plus the
+# Docker bridge ranges, where the reverse proxy lives.
+trusted_proxies = [
+  '127.0.0.0/8',
+  '::1',
+  '172.16.0.0/12',
+]
+
+[botdetection.ip_lists]
+# Clients that are never rate limited: your LAN, where the apps that call
+# the JSON API run. Replace with your own range.
+pass_ip = [
+  '192.0.2.0/24',
+]
