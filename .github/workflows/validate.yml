@@ -12,7 +12,7 @@ jobs:
     name: compose config
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Every compose file must parse and interpolate with its .env.example.
       - run: ./scripts/validate.sh
 
@@ -20,7 +20,7 @@ jobs:
     name: trivy repo scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Scan of the files in this repo: misconfiguration checks plus secret
       # detection. Fails the job on HIGH or CRITICAL findings, because these
       # are files this repo controls. Note: Trivy's misconfiguration scanner
@@ -40,7 +40,7 @@ jobs:
     outputs:
       list: ${{ steps.list.outputs.list }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: list
         run: |
           imgs=$(for f in $(find . -path ./.git -prune -o -name compose.yaml -print); do
