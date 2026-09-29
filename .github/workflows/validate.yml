@@ -62,8 +62,10 @@ jobs:
     steps:
       # A report, not a gate: CVEs in upstream images are the upstream's to
       # fix, so they must not turn this repo's badge red. Read the table in
-      # the job log and bump the pin when a fixed release exists.
+      # the job log and bump the pin when a fixed release exists. A registry
+      # rate limit or pull error is also not this repo's failure.
       - uses: aquasecurity/trivy-action@v0.36.0
+        continue-on-error: true
         with:
           scan-type: image
           image-ref: ${{ matrix.image }}
